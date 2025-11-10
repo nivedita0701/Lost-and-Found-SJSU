@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "SJSU Lost & Found",
+    "slug": "cmpe277-lostfound",
+    "scheme": "lostfound",
+    "owner": "pink",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "edu.sjsu.lostfound",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "We need access to your photos to upload item pictures.",
+        "NSCameraUsageDescription": "We need camera access to take item photos.",
+        "NSLocationWhenInUseUsageDescription": "We use your location to help place your lost/found item on the campus map."
+      }
+    },
+    "android": {
+      "package": "edu.sjsu.lostfound",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "mode": "production"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "87e86820-6c9c-47ef-90ae-5703085a31de"
+      }
+    }
+  }
+}
