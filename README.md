@@ -154,8 +154,6 @@ npx expo start -c
 |items/{id}| { title, description, category, location, status, imageUrl, createdAt, createdAtTs, createdByUid, lat, lng, radiusM }|
 |items/{id}/claims/{claimId}| { itemId, claimerUid, message, createdAt, createdAtTs, status }|
 ---
-
 📄 License
 
 MIT © 2025 San José State University — CMPE 277 Lost & Found Project
----
