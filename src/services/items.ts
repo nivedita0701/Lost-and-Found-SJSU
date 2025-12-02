@@ -116,3 +116,4 @@ export async function markItemClaimed(itemId: string, claimedByUid?: string) {
     claimedByUid: claimedByUid || ownerUid,
   });
 }
+

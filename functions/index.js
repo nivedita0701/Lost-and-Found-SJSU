@@ -6,6 +6,8 @@ const db = admin.firestore();
 
 async function sendExpoPush(token, payload) {
   if (!token) return;
+  const fetchMod = await import("node-fetch");
+  const fetch = fetchMod.default;
   await fetch("https://exp.host/--/api/v2/push/send", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -13,10 +15,25 @@ async function sendExpoPush(token, payload) {
   });
 }
 
+
+async function sendExpoBatch(messages) {
+  if (!messages.length) return;
+  const { default: fetch } = await import("node-fetch");
+  const CHUNK = 80;
+  for (let i = 0; i < messages.length; i += CHUNK) {
+    await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(messages.slice(i, i + CHUNK)),
+    });
+  }
+}
+
+
 // New item -> notify users who like that location
 exports.notifyOnNewItem = functions.firestore
   .document("items/{itemId}")
-  .onCreate(async (snap, context) => {
+  .onCreate(async (snap) => {
     const item = snap.data();
     const location = (item.location || "").toLowerCase();
     if (!location) return null;
@@ -36,9 +53,9 @@ exports.notifyOnNewItem = functions.firestore
       }
     });
 
-    const CHUNK = 80;
     const fetchMod = await import("node-fetch");
-    global.fetch = fetchMod.default;
+    const fetch = fetchMod.default;
+    const CHUNK = 80;
     for (let i = 0; i < messages.length; i += CHUNK) {
       await fetch("https://exp.host/--/api/v2/push/send", {
         method: "POST",
@@ -62,8 +79,6 @@ exports.notifyOwnerOnClaim = functions.firestore
     const ownerDoc = await db.collection("users").doc(ownerUid).get();
     const token = ownerDoc.exists ? (ownerDoc.data().pushToken || "") : "";
 
-    const fetchMod = await import("node-fetch");
-    global.fetch = fetchMod.default;
     await sendExpoPush(token, {
       title: "New claim received",
       body: `${item.title}: someone believes it's theirs.`,
@@ -87,8 +102,6 @@ exports.notifyClaimerOnApproval = functions.firestore
     const itemDoc = await db.collection("items").doc(ctx.params.itemId).get();
     const item = itemDoc.exists ? itemDoc.data() : { title: "Your claim" };
 
-    const fetchMod = await import("node-fetch");
-    global.fetch = fetchMod.default;
     await sendExpoPush(token, {
       title: "Claim approved",
       body: `${item.title} has been approved as yours.`,

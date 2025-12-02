@@ -22,7 +22,8 @@ import Slider from "@react-native-community/slider";
 import Constants from "expo-constants";
 import { GooglePlacesAutocomplete } from "react-native-google-places-autocomplete";
 import { createItem } from "@/services/items";
-import { auth } from "@/firebase";
+import { auth, db } from "@/firebase";
+import { doc, getDoc } from "firebase/firestore";
 import type { ItemCategory } from "@/types";
 
 const CATEGORIES: ItemCategory[] = [
@@ -61,11 +62,13 @@ export default function NewItemScreen({ navigation }: any) {
   const [location, setLocation] = useState("");
 
   // Modal fields
-  const [addr, setAddr] = useState("");         // search box text
+  const [addr, setAddr] = useState(""); // search box text
   const [building, setBuilding] = useState(""); // optional
-  const [notes, setNotes] = useState("");       // optional
+  const [notes, setNotes] = useState(""); // optional
 
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
+    null
+  );
   const [radiusM, setRadiusM] = useState<number>(100);
 
   const [category, setCategory] = useState<ItemCategory>("Electronics");
@@ -89,14 +92,20 @@ export default function NewItemScreen({ navigation }: any) {
 
   function animateTo(lat: number, lng: number) {
     mapRef.current?.animateToRegion(
-      { latitude: lat, longitude: lng, latitudeDelta: 0.01, longitudeDelta: 0.01 },
+      {
+        latitude: lat,
+        longitude: lng,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      },
       350
     );
   }
 
   function validate() {
     const e: typeof errors = {};
-    if (!title.trim() || title.trim().length < 3)
+    const t = title.trim();
+    if (!t || t.length < 3)
       e.title = "Title must be at least 3 characters.";
     if (!imageUri) e.image = "Please pick a photo.";
     if (!location.trim()) e.location = "Location is required.";
@@ -117,6 +126,27 @@ export default function NewItemScreen({ navigation }: any) {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.9,
     });
+    if (!res.canceled && res.assets?.length) {
+      setImageUri(res.assets[0].uri);
+      setErrors((prev) => ({ ...prev, image: undefined }));
+    }
+  }
+
+  async function takePhoto() {
+    setErr("");
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (perm.status !== "granted") {
+      setErr("Camera permission is required to take a photo.");
+      return;
+    }
+
+    const res = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.9,
+    });
+
     if (!res.canceled && res.assets?.length) {
       setImageUri(res.assets[0].uri);
       setErrors((prev) => ({ ...prev, image: undefined }));
@@ -146,13 +176,20 @@ export default function NewItemScreen({ navigation }: any) {
   // Optional reverse geocode for long-press
   async function reverseGeocode(lat: number, lng: number) {
     try {
-      const r = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+      const r = await Location.reverseGeocodeAsync({
+        latitude: lat,
+        longitude: lng,
+      });
       const top = r?.[0];
       if (top) {
-        const line = [top.name || top.street, top.city, top.region].filter(Boolean).join(", ");
+        const line = [top.name || top.street, top.city, top.region]
+          .filter(Boolean)
+          .join(", ");
         setAddr(line);
       }
-    } catch {/* ignore */}
+    } catch {
+      /* ignore */
+    }
   }
 
   const onMapLongPress: MapLongPress = (e) => {
@@ -163,7 +200,9 @@ export default function NewItemScreen({ navigation }: any) {
   };
 
   function saveMapSelection() {
-    const label = [building.trim(), addr.trim()].filter(Boolean).join(", ");
+    const label = [building.trim(), addr.trim()]
+      .filter(Boolean)
+      .join(", ");
     if (label) setLocation(label);
     setErrors((p) => ({ ...p, location: undefined }));
     setMapOpen(false);
@@ -175,10 +214,25 @@ export default function NewItemScreen({ navigation }: any) {
       setIsSubmitting(true);
       setErr("");
 
-      if (!validate()) { setIsSubmitting(false); return; }
+      if (!validate()) {
+        setIsSubmitting(false);
+        return;
+      }
 
       const uid = auth.currentUser?.uid || "";
       if (!uid) throw new Error("Not authenticated.");
+
+      // 🔹 Look up displayName from users/{uid}
+      let createdByName: string | undefined;
+      try {
+        const snap = await getDoc(doc(db, "users", uid));
+        if (snap.exists()) {
+          const data = snap.data() as any;
+          createdByName = (data.displayName as string) || undefined;
+        }
+      } catch {
+        // if it fails, we just leave createdByName undefined
+      }
 
       await createItem(
         {
@@ -188,6 +242,7 @@ export default function NewItemScreen({ navigation }: any) {
           location: location.trim(), // final human label only
           status,
           createdByUid: uid,
+          createdByName, // 🔹 store human name for UI
           lat: coords?.lat,
           lng: coords?.lng,
           radiusM,
@@ -256,24 +311,32 @@ export default function NewItemScreen({ navigation }: any) {
                 value={title}
                 onChangeText={(t) => {
                   setTitle(t);
-                  if (errors.title) setErrors({ ...errors, title: undefined });
+                  if (errors.title)
+                    setErrors({ ...errors, title: undefined });
                 }}
                 style={[s.input, errors.title ? s.errorBorder : undefined]}
                 placeholderTextColor="#667085"
               />
-              {errors.title ? <Text style={s.errorText}>{errors.title}</Text> : null}
+              {errors.title ? (
+                <Text style={s.errorText}>{errors.title}</Text>
+              ) : null}
 
               <TextInput
                 placeholder="Description"
                 value={description}
                 onChangeText={setDescription}
                 multiline
-                style={[s.input, { minHeight: 96, textAlignVertical: "top" }]}
+                style={[
+                  s.input,
+                  { minHeight: 96, textAlignVertical: "top" },
+                ]}
                 placeholderTextColor="#667085"
               />
             </View>
           </View>
-          {errors.image ? <Text style={s.errorText}>{errors.image}</Text> : null}
+          {errors.image ? (
+            <Text style={s.errorText}>{errors.image}</Text>
+          ) : null}
 
           {/* Category (UNCHANGED UI) */}
           <View style={{ gap: 6 }}>
@@ -285,7 +348,9 @@ export default function NewItemScreen({ navigation }: any) {
               <Text style={{ color: "#0B1221" }}>{category}</Text>
               <Text style={{ color: "#667085" }}>▼</Text>
             </Pressable>
-            {errors.category ? <Text style={s.errorText}>{errors.category}</Text> : null}
+            {errors.category ? (
+              <Text style={s.errorText}>{errors.category}</Text>
+            ) : null}
           </View>
 
           {/* Location (opens modal) */}
@@ -299,7 +364,9 @@ export default function NewItemScreen({ navigation }: any) {
             </Text>
             <Text style={{ color: "#667085" }}>📍</Text>
           </Pressable>
-          {errors.location ? <Text style={s.errorText}>{errors.location}</Text> : null}
+          {errors.location ? (
+            <Text style={s.errorText}>{errors.location}</Text>
+          ) : null}
 
           {/* Status */}
           <Text style={s.label}>Status</Text>
@@ -359,7 +426,11 @@ export default function NewItemScreen({ navigation }: any) {
                     }}
                     style={[s.optionRow, active && s.optionRowActive]}
                   >
-                    <Text style={{ fontWeight: active ? "700" : "400" }}>{c}</Text>
+                    <Text
+                      style={{ fontWeight: active ? "700" : "400" }}
+                    >
+                      {c}
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -443,12 +514,18 @@ export default function NewItemScreen({ navigation }: any) {
                 />
               </View>
 
-              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                }}
+              >
                 <Text style={s.muted}>Long-press map to drop a pin</Text>
                 <Pressable
                   onPress={async () => {
                     try {
-                      const { status } = await Location.requestForegroundPermissionsAsync();
+                      const { status } =
+                        await Location.requestForegroundPermissionsAsync();
                       if (status !== "granted") return;
                       const pos = await Location.getCurrentPositionAsync({});
                       const { latitude, longitude } = pos.coords;
@@ -488,7 +565,13 @@ export default function NewItemScreen({ navigation }: any) {
                 value={radiusM}
                 onValueChange={setRadiusM}
               />
-              <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 16 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "flex-end",
+                  gap: 16,
+                }}
+              >
                 <Pressable onPress={() => setMapOpen(false)}>
                   <Text style={s.link}>Cancel</Text>
                 </Pressable>
@@ -550,7 +633,12 @@ const s = StyleSheet.create({
   },
 
   statusRow: { flexDirection: "row", gap: 8, marginBottom: 4 },
-  pill: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1 },
+  pill: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
   pillActive: { borderColor: "#0055A2", backgroundColor: "#0055A2" },
   pillInactive: { borderColor: "#E5E7EB", backgroundColor: "white" },
   pillText: { fontWeight: "700" },
@@ -573,7 +661,29 @@ const s = StyleSheet.create({
   modalCard: { backgroundColor: "white", borderRadius: 14, padding: 16, gap: 10 },
   modalTitle: { fontSize: 18, fontWeight: "700" },
   optionRow: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10 },
-  optionRowActive: { backgroundColor: "#EEF4FF", borderWidth: 1, borderColor: "#0055A2" },
-  modalActions: { flexDirection: "row", justifyContent: "flex-end", marginTop: 8 },
+  optionRowActive: {
+    backgroundColor: "#EEF4FF",
+    borderWidth: 1,
+    borderColor: "#0055A2",
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: 8,
+  },
   link: { color: "#0055A2", fontWeight: "700" },
+
+  photoAction: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "white",
+  },
+  photoActionText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#0B1221",
+  },
 });
