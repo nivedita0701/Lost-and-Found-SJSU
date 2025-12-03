@@ -1,36 +1,236 @@
-# 🟦 SJSU Lost & Found (React Native + Firebase + Google Maps)
+# 📱 SJSU Lost & Found
 
-A full-stack React Native + Firebase Expo app for San José State University’s Lost & Found system.  
-Implements real-time item posting, maps-based search, and claim workflows.
+A mobile app for SJSU students to **post, search, and claim lost & found items** on campus.  
+Built with **React Native (Expo)** and **Firebase**, with support for **real-time updates**, **chat**, **claims**, **push notifications**, and **dark/light theming**.
 
 ---
 
-## ✨ Features
-- 🔐 **Email/Password Authentication**
-- 📸 **Post Lost/Found items** with photo (Firebase Storage)
-- 🕒 **Real-time Feed** (Firestore)
-- 🧭 **Search & Filter** (category, building, map-based location)
-- 📍 **Google Maps Integration**
-  - Interactive map centered on **SJSU campus**
-  - Autocomplete search (Google Places API) for buildings like *Clark Hall*
-  - Pin placement and adjustable radius
-- 💬 **Claims Workflow**
-  - Claimer requests ownership
-  - Owner can approve or reject
-  - Both get push notifications
-- 🔔 **Push Notifications**
-  - New item near user’s preferred area
-  - Claim updates
-- 🧱 **Security Rules**
-  - User / Item / Claim access control
-- ☁️ **Firebase Cloud Functions**
-  - Notifications & cleanup jobs
-- 🧪 **Testing**
-  - Jest + @testing-library/react-native
+## 📚 Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [App Architecture](#app-architecture)
+- [Project Structure](#project-structure)
+- [Setup & Installation](#setup--installation)
+  - [1. Prerequisites](#1-prerequisites)
+  - [2. Clone & Install](#2-clone--install)
+  - [3. Firebase Setup](#3-firebase-setup)
+  - [4. Cloudinary Setup](#4-cloudinary-setup)
+  - [5. Google Places API Setup](#5-google-places-api-setup)
+  - [6. Notifications Setup](#6-notifications-setup)
+  - [7. Run the App](#7-run-the-app)
+- [Key Screens & Flows](#key-screens--flows)
+- [Firestore Data Model](#firestore-data-model)
+- [Security Rules](#security-rules)
+- [Known Limitations](#known-limitations)
+- [Author](#author)
+
+---
+
+## Overview
+
+**Problem:**  
+Students frequently lose ID cards, keys, electronics, etc., but there is no **central, student-only, mobile-friendly** system for connecting finders with owners.
+
+**Solution:**  
+SJSU Lost & Found is a **campus-only marketplace** for lost & found items:
+
+- Only **@sjsu.edu** emails can register.
+- Items are posted with **photo, category, status, and campus location**.
+- Other students can **claim items** and **chat** with the poster to verify ownership.
+- Owners can approve a claim, which updates the item’s state and rejects other claims.
+
+---
+
+## Features
+
+### 🔐 Authentication & Profiles
+
+- Email/password auth restricted to **`@sjsu.edu`** addresses.
+- User profile with:
+  - Photo (upload via gallery)
+  - Display name
+  - Email
+  - Stats: **Items posted**, **Claims made**
+- Profile editing for self (photo + display name).
+- View other users’ profiles (read-only).
+
+### 📝 Posting Items
+
+- Create new items with:
+  - Title, description
+  - Category (Electronics, Clothing, ID, Keys, Charger, Other)
+  - Status (**Lost** or **Found**)
+  - Campus location (search + map)
+  - Photo (camera or gallery, uploaded to Cloudinary)
+- Items are saved to Firestore with:
+  - `claimed` boolean
+  - Coordinates, radius, building, and address metadata.
+
+### 🔍 Feed & Search
+
+- Home feed showing latest items.
+- Filters:
+  - All, Lost, Found, Claimed, Unclaimed
+- Sorting:
+  - Newest, Oldest, Category
+- Full-text-ish search across:
+  - Title, description, location, category
+
+### 📍 Map & Location
+
+- **Google Places Autocomplete** in the New Item map modal.
+- Long-press map to drop a pin (using `expo-location` and `react-native-maps`).
+- “Center on me” shortcut.
+- On item detail, open Google Maps directions.
+
+### 🧾 Claims System
+
+- Any logged-in user can submit a **claim** on an item (with optional message).
+- Owner sees a list of claims:
+  - Claimer name
+  - Status (Pending, Approved, Rejected)
+  - Message
+- Owner can **Approve** or **Reject**:
+  - Approve:
+    - Marks item as `claimed: true`
+    - Sets `claimedByUid`, `claimedAtTs`
+    - Auto-rejects all other pending claims
+  - Reject:
+    - Only updates that claim’s status
+
+### 💬 Chat
+
+- Owner and claimer can open a **direct chat** about an item.
+- Thread is tied to an `itemId` and exactly 2 participants.
+- Messages stored in Firestore under `/chats/{threadId}/messages`.
+
+### 🎨 Theming & Settings
+
+- Theme modes:
+  - **System**, **Light**, **Dark**
+- Accent color:
+  - **Blue**, **Gold**, **Purple**
+- Theme and accent are:
+  - Managed via a central `ThemeProvider`
+  - Persisted in `users/{uid}.prefs`
+- Settings screen:
+  - Enable push notifications
+  - Change theme & accent
+
+### 🔔 Push Notifications
+
+- Uses **Expo Notifications**.
+- “Enable push notifications” in Settings:
+  - Registers the device for push
+  - Stores token on the user record (via `notifications.ts`)
+- Intended triggers (depending on backend cron/service):
+  - New item near the user’s saved buildings/keywords
+  - Activity (claims, approvals, messages) involving the user
+
+### 🧮 Analytics / Stats
+
+- On create item:
+  - `users/{uid}.stats.itemsPosted` is incremented.
+- On create claim:
+  - `users/{uid}.stats.claimsMade` is incremented.
+- Profile screen shows:
+  - `Items posted: X • Claims made: Y`
+
+---
+
+## Tech Stack
+
+**Core:**
+- React Native (Expo)
+- TypeScript
+- Firebase JS SDK (Auth + Firestore)
+
+**Packages / Libraries Used:**
+
+- `firebase`
+- `@react-native-async-storage/async-storage`
+- `@react-navigation/native`
+- `@react-navigation/native-stack` (or equivalent for navigation)
+- `expo-image-picker`
+- `expo-location`
+- `expo-notifications`
+- `expo-device`
+- `expo-constants`
+- `react-native-maps`
+- `@react-native-community/slider`
+- `react-native-google-places-autocomplete`
+
+> All of these packages are installed and referenced in the project.  
+> Running `npm install` will install them through `package.json`.
+
+**External Services:**
+
+- **Firebase**: Auth, Firestore, security rules
+- **Cloudinary**: Image hosting
+- **Google Places API**: Address autocomplete
+
+---
+
+## App Architecture
+
+- **View Layer (Screens)**: in `src/screens`
+- **Domain Logic / Services**: in `src/services`
+  - `auth.ts`, `items.ts`, `claims.ts`, `chats.ts`, `notifications.ts`
+- **Theming**: `src/ui/ThemeProvider.tsx` & `src/ui/theme.ts`
+- **Firebase Setup**: `src/firebase.ts`
+
+The UI is **state-driven**, with Firestore `onSnapshot` listeners for:
+- Item details
+- Claims
+- Chat threads and messages
+- Live feed
+
+---
+
+## Project Structure
+
+```bash
+src/
+ ├── screens/
+ │    ├── FeedScreen.tsx
+ │    ├── ItemDetailScreen.tsx
+ │    ├── NewItemScreen.tsx
+ │    ├── LoginScreen.tsx
+ │    ├── RegisterScreen.tsx
+ │    ├── ProfileScreen.tsx
+ │    ├── MyItemsScreen.tsx
+ │    ├── SettingsScreen.tsx
+ │    ├── MapScreen.tsx        # if separated
+ │    └── ReportIssueScreen.tsx
+ │
+ ├── services/
+ │    ├── auth.ts
+ │    ├── items.ts
+ │    ├── claims.ts
+ │    ├── chats.ts
+ │    └── notifications.ts
+ │
+ ├── ui/
+ │    ├── ThemeProvider.tsx
+ │    └── theme.ts
+ │
+ ├── firebase.ts
+ ├── types.ts
+ └── App.tsx / app entry
 
 ---
 
 ## ⚙️ Setup
+
+### Prerequisites
+
+- Node.js and npm
+- Expo CLI
+- A Firebase project with Firestore + Auth enabled
+- A Cloudinary account
+- A Google Cloud project with Places API enabled
 
 ### 1️⃣ Install dependencies
 ```bash
@@ -41,12 +241,10 @@ npm install
 Use the modern CLI:
 
 ```bash
-npx expo start -c
+npm start -- --clear
 ```
 
----
-
-2️⃣ Firebase setup
+### 2️⃣ Firebase setup
 
 1. Create a Firebase project.
 2. Enable:
@@ -78,7 +276,6 @@ cd functions
 npm install
 npm run deploy
 ```
----
 
 3️⃣ Google Maps / Places API
 
@@ -109,8 +306,22 @@ export default ({ config }) => ({
   },
 });
 ```
----
-4️⃣ Required imports
+
+4️⃣ Cloudinary Setup
+
+1. The project uses unsigned uploads to Cloudinary.
+2. Go to Cloudinary dashboard → Settings → Upload.
+3. Create an unsigned upload preset named: cmpe277
+4. Ensure the Cloud name in src/services/items.ts matches your Cloudinary cloud name:
+```js
+// src/services/items.ts
+const CLOUD_NAME = "dgdzposxm";       // change if needed
+const UPLOAD_PRESET = "cmpe277";
+```
+5. Images will be uploaded to the lostfound folder by default.
+
+
+5️⃣ Required imports
 
 At the top of App.tsx, add this line (must be first):
 ```ts
@@ -119,8 +330,7 @@ import 'react-native-get-random-values';
 
 This polyfill fixes the crypto.getRandomValues() error from Google Places Autocomplete.
 
----
-5️⃣ Permissions
+6️⃣ Permissions
 
 Add this to your app.json:
 ```json
@@ -140,13 +350,14 @@ Add this to your app.json:
   }
 }
 ```
-6️⃣ Run the app
+Run the app
 # Clear cache + start
 ```bash
-npx expo start -c
+npm start -- --clear
 ```
+---
 
-🗂️ Data Model
+## 🗂️ Data Model
 
 | Collection | Fields |
 |-----------|--------------|
@@ -156,4 +367,5 @@ npx expo start -c
 ---
 📄 License
 
-MIT © 2025 San José State University — CMPE 277 Lost & Found Project
+MIT © 2025 
+San José State University
