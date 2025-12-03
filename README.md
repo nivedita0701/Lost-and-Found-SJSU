@@ -20,11 +20,6 @@ Built with **React Native (Expo)** and **Firebase**, with support for **real-tim
   - [5. Google Places API Setup](#5-google-places-api-setup)
   - [6. Notifications Setup](#6-notifications-setup)
   - [7. Run the App](#7-run-the-app)
-- [Key Screens & Flows](#key-screens--flows)
-- [Firestore Data Model](#firestore-data-model)
-- [Security Rules](#security-rules)
-- [Known Limitations](#known-limitations)
-- [Author](#author)
 
 ---
 
