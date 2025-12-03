@@ -28,6 +28,7 @@ import {
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { auth, db } from "../firebase";
+import { useTheme } from "@/ui/ThemeProvider";
 
 type Item = {
   id: string;
@@ -38,7 +39,7 @@ type Item = {
   location?: string;
   createdAt?: any;
   createdByUid?: string;
-  createdByName?: string;   // 🔹 NEW: display name stored on the item
+  createdByName?: string;
   imageUrl?: string;
   lat?: number;
   lng?: number;
@@ -53,10 +54,16 @@ const SEARCH_KEY = "feed.search";
 
 export default function FeedScreen() {
   const navigation = useNavigation<any>();
+  const { theme } = useTheme();
+  const { colors } = theme;
+
+  const s = useMemo(() => makeStyles(colors), [colors]);
 
   const [items, setItems] = useState<Item[]>([]);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "lost" | "found" | "claimed" | "unclaimed">("all");
+  const [filter, setFilter] = useState<
+    "all" | "lost" | "found" | "claimed" | "unclaimed"
+  >("all");
   const [sort, setSort] = useState<SortKey>("newest");
   const [refreshing, setRefreshing] = useState(false);
 
@@ -69,7 +76,8 @@ export default function FeedScreen() {
       if (!uid) return;
       try {
         const us = await getDoc(doc(db, "users", uid));
-        if (us.exists()) setAvatar(((us.data() as any).photoURL as string) || null);
+        if (us.exists())
+          setAvatar(((us.data() as any).photoURL as string) || null);
       } catch {}
     })();
   }, [uid]);
@@ -104,7 +112,10 @@ export default function FeedScreen() {
     const base = collection(db, "items");
     const qy = query(base, orderBy("createdAt", "desc"), limit(200));
     const unsub = onSnapshot(qy, (snap) => {
-      const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Item[];
+      const rows = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as any),
+      })) as Item[];
       setItems(rows);
     });
     return unsub;
@@ -116,7 +127,8 @@ export default function FeedScreen() {
     if (filter === "lost") arr = arr.filter((i) => i.status === "lost");
     if (filter === "found") arr = arr.filter((i) => i.status === "found");
     if (filter === "claimed") arr = arr.filter((i: any) => i.claimed === true);
-    if (filter === "unclaimed") arr = arr.filter((i: any) => i.claimed !== true);
+    if (filter === "unclaimed")
+      arr = arr.filter((i: any) => i.claimed !== true);
 
     const q = search.trim().toLowerCase();
     if (q) {
@@ -134,7 +146,9 @@ export default function FeedScreen() {
     } else if (sort === "oldest") {
       arr.sort((a, b) => tsToMillis(a.createdAt) - tsToMillis(b.createdAt));
     } else if (sort === "category") {
-      arr.sort((a, b) => String(a.category || "").localeCompare(String(b.category || "")));
+      arr.sort((a, b) =>
+        String(a.category || "").localeCompare(String(b.category || ""))
+      );
     }
 
     return arr;
@@ -154,10 +168,18 @@ export default function FeedScreen() {
   // sort sheet helpers
   function openSort() {
     setSortOpen(true);
-    Animated.timing(sheetAnim, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+    Animated.timing(sheetAnim, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
   }
   function closeSort() {
-    Animated.timing(sheetAnim, { toValue: 0, duration: 180, useNativeDriver: true }).start(({ finished }) => {
+    Animated.timing(sheetAnim, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
       if (finished) setSortOpen(false);
     });
   }
@@ -165,7 +187,10 @@ export default function FeedScreen() {
     setSort(v);
     closeSort();
   }
-  const translateY = sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] });
+  const translateY = sheetAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [40, 0],
+  });
   const opacity = sheetAnim;
 
   const renderItem = ({ item }: { item: Item }) => (
@@ -173,9 +198,13 @@ export default function FeedScreen() {
       style={s.card}
       onPress={() => navigation.navigate("ItemDetail", { itemId: item.id })}
     >
-      <View style={{ flexDirection: "row", gap: 12 }}>
+      <View style={s.cardRow}>
         <Image
-          source={{ uri: item.imageUrl || "https://placehold.co/96x96?text=No+Image" }}
+          source={{
+            uri:
+              item.imageUrl ||
+              "https://placehold.co/96x96?text=No+Image",
+          }}
           style={s.thumb}
         />
         <View style={{ flex: 1 }}>
@@ -199,10 +228,10 @@ export default function FeedScreen() {
     sort === "newest" ? "Newest" : sort === "oldest" ? "Oldest" : "Category";
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      {/* Header: profile left, title center (rendered by navigator), plus right */}
+    <SafeAreaView style={s.screen}>
+      {/* Header */}
       <View style={s.header}>
-        <Text style={s.headerTitle}>SJSU Lost & Found</Text>
+        <Text style={s.headerTitle}>SJSU Lost &amp; Found</Text>
 
         <TouchableOpacity
           onPress={() => navigation.navigate("Profile")}
@@ -224,44 +253,60 @@ export default function FeedScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Search */}
+      {/* Search + filters */}
       <View style={s.toolbar}>
         <TextInput
           value={search}
           onChangeText={setSearch}
           placeholder="Search title, category, building…"
           style={s.search}
+          placeholderTextColor={colors.textMuted}
           returnKeyType="search"
         />
 
-        {/* Filters: single horizontal row (scrollable) */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={s.chipsRow}
           style={{ marginTop: 10 }}
         >
-          <Pill active={filter === "all"} onPress={() => setFilter("all")} label="All" />
-          <Pill active={filter === "lost"} onPress={() => setFilter("lost")} label="Lost" />
-          <Pill active={filter === "found"} onPress={() => setFilter("found")} label="Found" />
+          <Pill
+            active={filter === "all"}
+            onPress={() => setFilter("all")}
+            label="All"
+            styles={s}
+          />
+          <Pill
+            active={filter === "lost"}
+            onPress={() => setFilter("lost")}
+            label="Lost"
+            styles={s}
+          />
+          <Pill
+            active={filter === "found"}
+            onPress={() => setFilter("found")}
+            label="Found"
+            styles={s}
+          />
           <Pill
             active={filter === "unclaimed"}
             onPress={() => setFilter("unclaimed")}
             label="Unclaimed"
+            styles={s}
           />
           <Pill
             active={filter === "claimed"}
             onPress={() => setFilter("claimed")}
             label="Claimed"
+            styles={s}
           />
         </ScrollView>
 
-        {/* Sort button (kept separate) */}
         <View style={s.sortBar}>
           <Text style={s.sortLabel}>Sort by:</Text>
           <TouchableOpacity style={s.sortBtn} onPress={openSort}>
             <Text style={s.sortBtnText}>{sortLabel}</Text>
-            <Text style={{ color: "#6b7280", marginLeft: 6 }}>⌄</Text>
+            <Text style={s.sortChevron}>⌄</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -270,7 +315,7 @@ export default function FeedScreen() {
         data={filtered}
         keyExtractor={(i) => i.id}
         renderItem={renderItem}
-        contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
+        contentContainerStyle={s.listContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
@@ -293,16 +338,19 @@ export default function FeedScreen() {
               label="Newest"
               selected={sort === "newest"}
               onPress={() => chooseSort("newest")}
+              styles={s}
             />
             <SortRow
               label="Oldest"
               selected={sort === "oldest"}
               onPress={() => chooseSort("oldest")}
+              styles={s}
             />
             <SortRow
               label="Category"
               selected={sort === "category"}
               onPress={() => chooseSort("category")}
+              styles={s}
             />
           </Animated.View>
         </Pressable>
@@ -315,20 +363,21 @@ function Pill({
   label,
   onPress,
   active,
+  styles,
 }: {
   label: string;
   onPress: () => void;
   active?: boolean;
+  styles: ReturnType<typeof makeStyles>;
 }) {
   return (
     <TouchableOpacity
       onPress={onPress}
-      style={[
-        s.pill,
-        active && { backgroundColor: "#0B1221", borderColor: "#0B1221" },
-      ]}
+      style={[styles.pill, active && styles.pillActive]}
     >
-      <Text style={[s.pillText, active && { color: "white" }]}>{label}</Text>
+      <Text style={[styles.pillText, active && styles.pillTextActive]}>
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -337,15 +386,22 @@ function SortRow({
   label,
   selected,
   onPress,
+  styles,
 }: {
   label: string;
   selected?: boolean;
   onPress: () => void;
+  styles: ReturnType<typeof makeStyles>;
 }) {
   return (
-    <TouchableOpacity onPress={onPress} style={[s.row, selected && s.rowActive]}>
-      <Text style={[s.rowText, selected && s.rowTextActive]}>{label}</Text>
-      {selected ? <Text style={s.check}>✓</Text> : null}
+    <TouchableOpacity
+      onPress={onPress}
+      style={[styles.row, selected && styles.rowActive]}
+    >
+      <Text style={[styles.rowText, selected && styles.rowTextActive]}>
+        {label}
+      </Text>
+      {selected ? <Text style={styles.check}>✓</Text> : null}
     </TouchableOpacity>
   );
 }
@@ -374,116 +430,152 @@ function timeAgo(t?: any) {
   return `${d}d ago`;
 }
 
-const s = StyleSheet.create({
-  header: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  headerTitle: { fontSize: 20, fontWeight: "800", flex: 1 },
+function makeStyles(colors: any) {
+  return StyleSheet.create({
+    screen: { flex: 1, backgroundColor: colors.background },
 
-  avatarBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#E5E7EB",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 8,
-    overflow: "hidden",
-  },
-  avatarImg: { width: "100%", height: "100%" },
-  avatarFallback: { fontSize: 18 },
+    header: {
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.background,
+    },
+    headerTitle: {
+      fontSize: 20,
+      fontWeight: "800",
+      flex: 1,
+      color: colors.text,
+    },
 
-  addBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#FFD166",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  addBtnText: { fontSize: 22, fontWeight: "800", color: "#0B1221" },
+    avatarBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.card,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 8,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    avatarImg: { width: "100%", height: "100%" },
+    avatarFallback: { fontSize: 18, color: colors.text },
 
-  toolbar: { paddingHorizontal: 16 },
-  search: {
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: "white",
-  },
+    addBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.blue,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    addBtnText: { fontSize: 22, fontWeight: "800", color: colors.background },
 
-  // Single-line chips row
-  chipsRow: { alignItems: "center", gap: 8, paddingRight: 8 },
-  pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "white",
-  },
-  pillText: { fontWeight: "700", color: "#0B1221" },
+    toolbar: {
+      paddingHorizontal: 16,
+      backgroundColor: colors.background,
+    },
+    search: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      backgroundColor: colors.card,
+      color: colors.text,
+    },
 
-  sortBar: {
-    marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  sortLabel: { fontWeight: "700", color: "#0B1221" },
-  sortBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "white",
-  },
-  sortBtnText: { fontWeight: "700", color: "#0B1221" },
+    chipsRow: { alignItems: "center", gap: 8, paddingRight: 8 },
+    pill: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+    },
+    pillActive: {
+      backgroundColor: colors.blue,
+      borderColor: colors.blue,
+    },
+    pillText: { fontWeight: "700", color: colors.text },
+    pillTextActive: { color: "#FFFFFF" },
 
-  card: {
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    backgroundColor: "white",
-  },
-  thumb: { width: 88, height: 88, borderRadius: 8, backgroundColor: "#e5e7eb" },
-  cardTitle: { fontSize: 16, fontWeight: "800" },
-  cardMeta: { marginTop: 4, color: "#475569" },
-  cardTime: { marginTop: 6, color: "#6b7280", fontSize: 12 },
+    sortBar: {
+      marginTop: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    sortLabel: { fontWeight: "700", color: colors.text },
+    sortBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+    },
+    sortBtnText: { fontWeight: "700", color: colors.text },
+    sortChevron: { color: colors.textMuted, marginLeft: 6 },
 
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.2)",
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    backgroundColor: "white",
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 6,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  sheetTitle: { fontWeight: "800", fontSize: 16, marginBottom: 6 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 6,
-    borderRadius: 8,
-  },
-  rowActive: { backgroundColor: "#F3F4F6" },
-  rowText: { fontSize: 16, color: "#0B1221" },
-  rowTextActive: { fontWeight: "800" },
-  check: { color: "#0B1221", fontSize: 16, fontWeight: "800" },
-});
+    listContent: { padding: 16, paddingBottom: 80 },
+
+    card: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 12,
+      backgroundColor: colors.card,
+    },
+    cardRow: { flexDirection: "row", gap: 12 },
+    thumb: {
+      width: 88,
+      height: 88,
+      borderRadius: 8,
+      backgroundColor: colors.border,
+    },
+    cardTitle: { fontSize: 16, fontWeight: "800", color: colors.text },
+    cardMeta: { marginTop: 4, color: colors.textMuted },
+    cardTime: { marginTop: 6, color: colors.textMuted, fontSize: 12 },
+
+    backdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.2)",
+      justifyContent: "flex-end",
+    },
+    sheet: {
+      backgroundColor: colors.card,
+      paddingHorizontal: 12,
+      paddingTop: 12,
+      paddingBottom: 6,
+      borderTopLeftRadius: 16,
+      borderTopRightRadius: 16,
+      borderColor: colors.border,
+      borderTopWidth: 1,
+    },
+    sheetTitle: {
+      fontWeight: "800",
+      fontSize: 16,
+      marginBottom: 6,
+      color: colors.text,
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 12,
+      paddingHorizontal: 6,
+      borderRadius: 8,
+    },
+    rowActive: { backgroundColor: colors.background },
+    rowText: { fontSize: 16, color: colors.text },
+    rowTextActive: { fontWeight: "800" },
+    check: { color: colors.text, fontSize: 16, fontWeight: "800" },
+  });
+}

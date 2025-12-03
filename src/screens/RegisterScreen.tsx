@@ -1,11 +1,24 @@
 // src/screens/RegisterScreen.tsx
-import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from "react-native";
+import React, { useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+  SafeAreaView,
+} from "react-native";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { auth, db } from "../firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { useTheme } from "@/ui/ThemeProvider";
 
 export default function RegisterScreen({ navigation }: any) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+  const s = useMemo(() => makeStyles(colors), [colors]);
+
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [name, setName] = useState("");
@@ -29,14 +42,13 @@ export default function RegisterScreen({ navigation }: any) {
         await updateProfile(cred.user, { displayName: name.trim() });
       }
 
-      // seed user profile doc
       await setDoc(
         doc(db, "users", cred.user.uid),
         {
           email: em,
           displayName: name.trim() || null,
           photoURL: cred.user.photoURL || null,
-          verified: true, // SJSU email -> verified
+          verified: true,
           stats: { itemsPosted: 0, claimsMade: 0 },
           preferredLocations: [],
           tokens: [],
@@ -56,56 +68,151 @@ export default function RegisterScreen({ navigation }: any) {
   }
 
   return (
-    <View style={s.wrap}>
-      <Text style={s.h1}>Create account</Text>
+    <SafeAreaView style={[s.flex, { backgroundColor: colors.background }]}>
+      <View style={s.wrap}>
+        <Text style={s.titleBadge}>SJSU Lost &amp; Found</Text>
+        <Text style={s.h1}>Create account</Text>
+        <Text style={s.subtitle}>
+          Use your SJSU email to securely post and find items on campus.
+        </Text>
 
-      <Text style={s.label}>Full name</Text>
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        placeholder="Your name"
-        autoCapitalize="words"
-        style={s.input}
-      />
+        <View style={s.card}>
+          <Text style={s.label}>Full name</Text>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder="Your name"
+            autoCapitalize="words"
+            style={s.input}
+            placeholderTextColor={colors.textMuted}
+          />
 
-      <Text style={s.label}>SJSU email</Text>
-      <TextInput
-        value={email}
-        onChangeText={setEmail}
-        placeholder="you@sjsu.edu"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        style={s.input}
-      />
+          <Text style={s.label}>SJSU email</Text>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            placeholder="you@sjsu.edu"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            style={s.input}
+            placeholderTextColor={colors.textMuted}
+          />
 
-      <Text style={s.label}>Password</Text>
-      <TextInput
-        value={pass}
-        onChangeText={setPass}
-        placeholder="••••••••"
-        secureTextEntry
-        style={s.input}
-      />
+          <Text style={s.label}>Password</Text>
+          <TextInput
+            value={pass}
+            onChangeText={setPass}
+            placeholder="••••••••"
+            secureTextEntry
+            style={s.input}
+            placeholderTextColor={colors.textMuted}
+          />
 
-      <TouchableOpacity style={s.cta} onPress={onRegister} disabled={loading}>
-        <Text style={s.ctaTxt}>{loading ? "Creating…" : "Create account"}</Text>
-      </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.cta, loading && s.ctaDisabled]}
+            onPress={onRegister}
+            disabled={loading}
+          >
+            <Text style={s.ctaTxt}>
+              {loading ? "Creating…" : "Create account"}
+            </Text>
+          </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => navigation.replace("Login")} style={{ marginTop: 12 }}>
-        <Text style={{ color: "#0055A2" }}>Already have an account? Sign in</Text>
-      </TouchableOpacity>
-    </View>
+          <TouchableOpacity
+            onPress={() => navigation.replace("Login")}
+            style={{ marginTop: 14, alignItems: "center" }}
+          >
+            <Text style={s.link}>
+              Already have an account?{" "}
+              <Text style={s.linkBold}>Sign in</Text>
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
-const s = StyleSheet.create({
-  wrap: { flex: 1, padding: 16, gap: 10, justifyContent: "center" },
-  h1: { fontSize: 24, fontWeight: "800", marginBottom: 8 },
-  label: { marginTop: 8, fontWeight: "700" },
-  input: {
-    borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 10, backgroundColor: "white",
-  },
-  cta: { marginTop: 16, backgroundColor: "#0B1221", borderRadius: 12, paddingVertical: 14, alignItems: "center" },
-  ctaTxt: { color: "white", fontWeight: "800" },
-});
+function makeStyles(colors: any) {
+  return StyleSheet.create({
+    flex: { flex: 1 },
+    wrap: {
+      flex: 1,
+      padding: 20,
+      justifyContent: "center",
+    },
+    titleBadge: {
+      alignSelf: "flex-start",
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.border,
+      color: colors.textMuted,
+      fontSize: 12,
+      marginBottom: 6,
+    },
+    h1: {
+      fontSize: 26,
+      fontWeight: "800",
+      color: colors.text,
+      marginBottom: 4,
+    },
+    subtitle: {
+      color: colors.textMuted,
+      fontSize: 14,
+      marginBottom: 18,
+    },
+    card: {
+      borderRadius: 16,
+      padding: 16,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+      shadowColor: colors.shadow,
+      shadowOpacity: 0.25,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      gap: 8,
+    },
+    label: {
+      marginTop: 8,
+      marginBottom: 4,
+      fontWeight: "700",
+      color: colors.text,
+      fontSize: 14,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      backgroundColor: colors.card,
+      color: colors.text,
+    },
+    cta: {
+      marginTop: 18,
+      backgroundColor: colors.blue,
+      borderRadius: 999,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    ctaDisabled: {
+      opacity: 0.6,
+    },
+    ctaTxt: {
+      color: colors.background,
+      fontWeight: "800",
+      fontSize: 15,
+    },
+    link: {
+      color: colors.textMuted,
+      fontSize: 14,
+    },
+    linkBold: {
+      color: colors.blue,
+      fontWeight: "700",
+    },
+  });
+}

@@ -2,8 +2,16 @@
 import { Item } from "@/types";
 import { db, auth } from "@/firebase";
 import {
-  addDoc, collection, onSnapshot, orderBy, query, serverTimestamp,
-  updateDoc, doc, getDoc
+  addDoc,
+  collection,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  doc,
+  getDoc,
+  increment,
 } from "firebase/firestore";
 
 const CLOUD_NAME = "dgdzposxm";
@@ -48,17 +56,65 @@ export async function uploadItemPhotoAsync(localUri: string, mimeType?: Mime) {
 type ItemDoc = Item & { id: string };
 
 export async function createItem(
-  data: Omit<Item, "id" | "imageUrl" | "createdAt">,
+  data: {
+    title: string;
+    description?: string;
+    category: string;
+    location: string;
+    status: "lost" | "found";
+    createdByUid: string;
+    createdByName?: string;
+    lat?: number | null;
+    lng?: number | null;
+    radiusM?: number;
+    notes?: string | null;
+    building?: string | null;
+    address?: string | null;
+  },
   localImageUri: string
 ) {
+  const { createdByUid } = data;
+  if (!createdByUid) throw new Error("createdByUid is required");
+  if (!localImageUri) throw new Error("Image URI is required");
+
+  // 1) Upload image to Cloudinary
   const imageUrl = await uploadItemPhotoAsync(localImageUri);
-  await addDoc(collection(db, "items"), {
+
+  // 2) Build Firestore doc data
+  const ts = serverTimestamp();
+  const docData: any = {
     ...data,
     imageUrl,
-    createdAt: Date.now(),
-    createdAtTs: serverTimestamp(),
+    images: {
+      original: [imageUrl],
+    },
+    claimed: false,
+    createdAt: ts,    // 🔥 required by your rules (timestamp)
+    createdAtTs: ts,  // optional: for ordering in queries
+  };
+
+  // Strip out ONLY undefined values – Firestore doesn’t accept `undefined`
+  Object.keys(docData).forEach((k) => {
+    if (docData[k] === undefined) {
+      delete docData[k];
+    }
   });
+
+  // 3) Create item
+  const itemRef = await addDoc(collection(db, "items"), docData);
+
+  // 4) Increment stats.itemsPosted (non-fatal if it fails)
+  try {
+    await updateDoc(doc(db, "users", createdByUid), {
+      "stats.itemsPosted": increment(1),
+    });
+  } catch {
+    // ignore – item is still created
+  }
+
+  return itemRef;
 }
+
 
 export function watchFeed(opts: {
   filter?: "all" | "lost" | "found" | "claimed";
@@ -109,11 +165,13 @@ export async function markItemClaimed(itemId: string, claimedByUid?: string) {
   const ownerUid = auth.currentUser?.uid || "";
   // use client ms for immediate UI + serverTimestamp for canonical time
   await updateDoc(doc(db, "items", itemId), {
-    status: "claimed",
+    // keep original lost/found status as-is, just mark boolean claimed
+    claimed: true,
     claimedAtMs: Date.now(),
     claimedAtTs: serverTimestamp(),
     // If a claimer was approved, prefer that; otherwise default to the owner who marked it
     claimedByUid: claimedByUid || ownerUid,
   });
 }
+
 

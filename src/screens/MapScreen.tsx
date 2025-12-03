@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from "react";
-import { View, Alert, Linking } from "react-native";
+// src/screens/MapScreen.tsx
+import React, { useEffect, useState, useMemo } from "react";
+import { View, Alert, Linking, StyleSheet } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import MapViewClustering from "react-native-map-clustering";
 import { collection, onSnapshot, query } from "firebase/firestore";
-import { db } from "../firebase"; // path: src/screens -> src/firebase.ts
+import { db } from "../firebase";
 import { useNavigation } from "@react-navigation/native";
+import { useTheme } from "@/ui/ThemeProvider";
 
 type Item = {
   id: string;
@@ -21,11 +23,22 @@ export default function MapScreen() {
   const [items, setItems] = useState<Item[]>([]);
   const nav = useNavigation<any>();
 
+  const { theme } = useTheme();
+  const { colors } = theme;
+  const s = useMemo(() => makeStyles(colors), [colors]);
+
   useEffect(() => {
-    const q = query(collection(db, "items"));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Item[];
-      setItems(data.filter((i) => typeof i.lat === "number" && typeof i.lng === "number"));
+    const qy = query(collection(db, "items"));
+    const unsub = onSnapshot(qy, (snap) => {
+      const data = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as any),
+      })) as Item[];
+      setItems(
+        data.filter(
+          (i) => typeof i.lat === "number" && typeof i.lng === "number"
+        )
+      );
     });
     return unsub;
   }, []);
@@ -36,9 +49,9 @@ export default function MapScreen() {
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={s.container}>
       <MapViewClustering
-        style={{ flex: 1 }}
+        style={StyleSheet.absoluteFill}
         initialRegion={{
           latitude: SJSU.latitude,
           longitude: SJSU.longitude,
@@ -52,11 +65,22 @@ export default function MapScreen() {
             coordinate={{ latitude: it.lat!, longitude: it.lng! }}
             title={it.title}
             description={`${it.category || "item"} • ${it.location || ""}`}
-            onPress={() => openDirections(it.lat!, it.lng!)}                 // tap pin = directions
-            onCalloutPress={() => nav.navigate("ItemDetail", { itemId: it.id })} // tap callout = details
+            onPress={() => openDirections(it.lat!, it.lng!)} // tap pin = directions
+            onCalloutPress={() =>
+              nav.navigate("ItemDetail", { itemId: it.id })
+            } // tap callout = details
           />
         ))}
       </MapViewClustering>
     </View>
   );
+}
+
+function makeStyles(colors: any) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+  });
 }

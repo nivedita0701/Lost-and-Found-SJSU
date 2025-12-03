@@ -1,5 +1,5 @@
 // src/screens/NewItemScreen.tsx
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useMemo } from "react";
 import {
   View,
   Image,
@@ -14,17 +14,18 @@ import {
   TextInput,
   Button,
   StyleSheet,
+  TouchableOpacity
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import MapView, { Marker, type Region } from "react-native-maps";
 import Slider from "@react-native-community/slider";
-import Constants from "expo-constants";
 import { GooglePlacesAutocomplete } from "react-native-google-places-autocomplete";
 import { createItem } from "@/services/items";
 import { auth, db } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import type { ItemCategory } from "@/types";
+import { useTheme } from "@/ui/ThemeProvider";
 
 const CATEGORIES: ItemCategory[] = [
   "Electronics",
@@ -47,24 +48,24 @@ const SJSU_REGION: Region = {
   longitudeDelta: 0.01,
 };
 
-// Type for MapView long-press handler
 type MapLongPress = NonNullable<
   React.ComponentProps<typeof MapView>["onLongPress"]
 >;
 
 export default function NewItemScreen({ navigation }: any) {
-  // const GOOGLE_KEY = Constants.expoConfig?.extra?.GOOGLE_MAPS_API_KEY as string;
+  const { theme } = useTheme();
+  const { colors } = theme;
+  const s = useMemo(() => makeStyles(colors), [colors]);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
 
-  // Main-screen label we show under “Location”
   const [location, setLocation] = useState("");
 
   // Modal fields
-  const [addr, setAddr] = useState(""); // search box text
-  const [building, setBuilding] = useState(""); // optional
-  const [notes, setNotes] = useState(""); // optional
+  const [addr, setAddr] = useState("");
+  const [building, setBuilding] = useState("");
+  const [notes, setNotes] = useState("");
 
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
     null
@@ -87,7 +88,6 @@ export default function NewItemScreen({ navigation }: any) {
   const [catOpen, setCatOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
 
-  // Map ref to animate region
   const mapRef = useRef<MapView | null>(null);
 
   function animateTo(lat: number, lng: number) {
@@ -173,7 +173,6 @@ export default function NewItemScreen({ navigation }: any) {
     }
   }
 
-  // Optional reverse geocode for long-press
   async function reverseGeocode(lat: number, lng: number) {
     try {
       const r = await Location.reverseGeocodeAsync({
@@ -222,7 +221,7 @@ export default function NewItemScreen({ navigation }: any) {
       const uid = auth.currentUser?.uid || "";
       if (!uid) throw new Error("Not authenticated.");
 
-      // 🔹 Look up displayName from users/{uid}
+      // Look up displayName from users/{uid}
       let createdByName: string | undefined;
       try {
         const snap = await getDoc(doc(db, "users", uid));
@@ -231,27 +230,28 @@ export default function NewItemScreen({ navigation }: any) {
           createdByName = (data.displayName as string) || undefined;
         }
       } catch {
-        // if it fails, we just leave createdByName undefined
+        // ignore
       }
 
-      await createItem(
-        {
-          title: title.trim(),
-          description: description.trim(),
-          category,
-          location: location.trim(), // final human label only
-          status,
-          createdByUid: uid,
-          createdByName, // 🔹 store human name for UI
-          lat: coords?.lat,
-          lng: coords?.lng,
-          radiusM,
-          notes: notes.trim() || undefined,
-          building: building.trim() || undefined,
-          address: addr.trim() || undefined,
-        } as any,
-        imageUri
-      );
+    await createItem(
+      {
+        title: title.trim(),
+        description: description.trim(),
+        category,
+        location: location.trim(),
+        status,
+        createdByUid: uid,
+        createdByName,
+        lat: coords?.lat ?? null,
+        lng: coords?.lng ?? null,
+        radiusM,
+        notes: notes.trim() || null,
+        building: building.trim() || null,
+        address: addr.trim() || null,
+      } as any,
+      imageUri
+    );
+
 
       Alert.alert("Posted", "Your item has been posted.");
 
@@ -281,7 +281,7 @@ export default function NewItemScreen({ navigation }: any) {
     !!imageUri && title.trim().length >= 3 && !!location.trim() && !isSubmitting;
 
   return (
-    <SafeAreaView style={s.flex}>
+    <SafeAreaView style={[s.flex, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
         style={s.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -314,8 +314,11 @@ export default function NewItemScreen({ navigation }: any) {
                   if (errors.title)
                     setErrors({ ...errors, title: undefined });
                 }}
-                style={[s.input, errors.title ? s.errorBorder : undefined]}
-                placeholderTextColor="#667085"
+                style={[
+                  s.input,
+                  errors.title ? s.errorBorder : undefined,
+                ]}
+                placeholderTextColor={colors.textMuted}
               />
               {errors.title ? (
                 <Text style={s.errorText}>{errors.title}</Text>
@@ -330,7 +333,7 @@ export default function NewItemScreen({ navigation }: any) {
                   s.input,
                   { minHeight: 96, textAlignVertical: "top" },
                 ]}
-                placeholderTextColor="#667085"
+                placeholderTextColor={colors.textMuted}
               />
             </View>
           </View>
@@ -338,15 +341,18 @@ export default function NewItemScreen({ navigation }: any) {
             <Text style={s.errorText}>{errors.image}</Text>
           ) : null}
 
-          {/* Category (UNCHANGED UI) */}
+          {/* Category */}
           <View style={{ gap: 6 }}>
             <Text style={s.label}>Category</Text>
             <Pressable
               onPress={() => setCatOpen(true)}
-              style={[s.selectBox, errors.category ? s.errorBorder : undefined]}
+              style={[
+                s.selectBox,
+                errors.category ? s.errorBorder : undefined,
+              ]}
             >
-              <Text style={{ color: "#0B1221" }}>{category}</Text>
-              <Text style={{ color: "#667085" }}>▼</Text>
+              <Text style={{ color: colors.text }}>{category}</Text>
+              <Text style={{ color: colors.textMuted }}>▼</Text>
             </Pressable>
             {errors.category ? (
               <Text style={s.errorText}>{errors.category}</Text>
@@ -357,12 +363,19 @@ export default function NewItemScreen({ navigation }: any) {
           <Text style={s.label}>Location</Text>
           <Pressable
             onPress={openMap}
-            style={[s.selectBox, errors.location ? s.errorBorder : undefined]}
+            style={[
+              s.selectBox,
+              errors.location ? s.errorBorder : undefined,
+            ]}
           >
-            <Text style={{ color: location ? "#0B1221" : "#667085" }}>
+            <Text
+              style={{
+                color: location ? colors.text : colors.textMuted,
+              }}
+            >
               {location || "Select on map / search address"}
             </Text>
-            <Text style={{ color: "#667085" }}>📍</Text>
+            <Text style={{ color: colors.textMuted }}>📍</Text>
           </Pressable>
           {errors.location ? (
             <Text style={s.errorText}>{errors.location}</Text>
@@ -377,7 +390,10 @@ export default function NewItemScreen({ navigation }: any) {
                 <Pressable
                   key={key}
                   onPress={() => setStatus(key)}
-                  style={[s.pill, active ? s.pillActive : s.pillInactive]}
+                  style={[
+                    s.pill,
+                    active ? s.pillActive : s.pillInactive,
+                  ]}
                 >
                   <Text
                     style={[
@@ -392,7 +408,7 @@ export default function NewItemScreen({ navigation }: any) {
             })}
           </View>
 
-          {/* Footer summary — NO coordinates */}
+          {/* Footer summary */}
           <Text style={s.muted}>
             Selected: {status} • {category}
             {location ? ` • ${location}` : ""}
@@ -400,15 +416,20 @@ export default function NewItemScreen({ navigation }: any) {
 
           {err ? <Text style={s.errorText}>{err}</Text> : null}
 
-          <Button
-            title={isSubmitting ? "Posting..." : "Post"}
-            disabled={!canPost}
+          <TouchableOpacity
             onPress={onPost}
-          />
+            disabled={!canPost}
+            style={[s.postButton, !canPost && s.postButtonDisabled]}
+          >
+            <Text style={s.postButtonText}>
+              {isSubmitting ? "Posting..." : "Post"}
+            </Text>
+          </TouchableOpacity>
+
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Category Modal (UNCHANGED) */}
+      {/* Category Modal */}
       <Modal visible={catOpen} transparent animationType="fade">
         <Pressable onPress={() => setCatOpen(false)} style={s.modalBackdrop}>
           <View style={s.modalCard}>
@@ -424,10 +445,16 @@ export default function NewItemScreen({ navigation }: any) {
                       setErrors((e) => ({ ...e, category: undefined }));
                       setCatOpen(false);
                     }}
-                    style={[s.optionRow, active && s.optionRowActive]}
+                    style={[
+                      s.optionRow,
+                      active ? s.optionRowActive : undefined,
+                    ]}
                   >
                     <Text
-                      style={{ fontWeight: active ? "700" : "400" }}
+                      style={{
+                        fontWeight: active ? "700" : "400",
+                        color: colors.text,
+                      }}
                     >
                       {c}
                     </Text>
@@ -452,7 +479,6 @@ export default function NewItemScreen({ navigation }: any) {
             <View style={{ padding: 12, gap: 8 }}>
               <Text style={s.modalTitle}>Choose Location</Text>
 
-              {/* Google Places Autocomplete input */}
               <View style={{ zIndex: 20 }}>
                 <GooglePlacesAutocomplete
                   placeholder="Search address or place (e.g., Clark Hall)"
@@ -461,12 +487,11 @@ export default function NewItemScreen({ navigation }: any) {
                   textInputProps={{
                     value: addr,
                     onChangeText: setAddr,
-                    placeholderTextColor: "#667085",
+                    placeholderTextColor: colors.textMuted,
                   }}
                   query={{
                     key: GOOGLE_PLACES_KEY,
                     language: "en",
-                    // Bias suggestions to SJSU area (~5km)
                     location: `${SJSU.lat},${SJSU.lng}`,
                     radius: 5000,
                     components: "country:us",
@@ -482,35 +507,41 @@ export default function NewItemScreen({ navigation }: any) {
                   styles={{
                     container: { flex: 0 },
                     textInputContainer: { padding: 0, margin: 0 },
-                    textInput: [s.input],
+                    textInput: s.input,
                     listView: {
-                      backgroundColor: "white",
+                      backgroundColor: colors.card,
                       borderWidth: 1,
-                      borderColor: "#E5E7EB",
+                      borderColor: colors.border,
                       borderRadius: 10,
                       marginTop: 6,
                     },
-                    row: { paddingVertical: 10, paddingHorizontal: 12 },
-                    separator: { height: 1, backgroundColor: "#F1F5F9" },
+                    row: {
+                      paddingVertical: 10,
+                      paddingHorizontal: 12,
+                      backgroundColor: colors.card,
+                    },
+                    separator: {
+                      height: 1,
+                      backgroundColor: colors.border,
+                    },
                   }}
                 />
               </View>
 
-              {/* Building / Notes (optional) */}
               <View style={{ flexDirection: "row", gap: 8 }}>
                 <TextInput
                   placeholder="Building / Room (optional)"
                   value={building}
                   onChangeText={setBuilding}
                   style={[s.input, { flex: 1 }]}
-                  placeholderTextColor="#667085"
+                  placeholderTextColor={colors.textMuted}
                 />
                 <TextInput
                   placeholder="Notes (optional)"
                   value={notes}
                   onChangeText={setNotes}
                   style={[s.input, { flex: 1 }]}
-                  placeholderTextColor="#667085"
+                  placeholderTextColor={colors.textMuted}
                 />
               </View>
 
@@ -544,7 +575,7 @@ export default function NewItemScreen({ navigation }: any) {
               <MapView
                 ref={mapRef}
                 style={{ flex: 1 }}
-                initialRegion={SJSU_REGION} // always default to SJSU
+                initialRegion={SJSU_REGION}
                 onLongPress={onMapLongPress}
               >
                 <Marker
@@ -557,7 +588,9 @@ export default function NewItemScreen({ navigation }: any) {
             </View>
 
             <View style={{ padding: 12, gap: 10 }}>
-              <Text>Radius: ~{radiusM} m</Text>
+              <Text style={{ color: colors.text }}>
+                Radius: ~{radiusM} m
+              </Text>
               <Slider
                 minimumValue={25}
                 maximumValue={500}
@@ -587,103 +620,135 @@ export default function NewItemScreen({ navigation }: any) {
   );
 }
 
-const s = StyleSheet.create({
-  flex: { flex: 1 },
-  container: { padding: 16, gap: 12, paddingBottom: 40 },
+function makeStyles(colors: any) {
+  return StyleSheet.create({
+    flex: { flex: 1 },
+    container: {
+      padding: 16,
+      gap: 12,
+      paddingBottom: 40,
+      backgroundColor: colors.background,
+    },
 
-  topRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
+    topRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
 
-  thumb: {
-    width: 112,
-    height: 112,
-    borderRadius: 10,
-    backgroundColor: "#EDEEEF",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: "hidden",
-  },
-  thumbImage: { width: "100%", height: "100%" },
+    // Standard grey upload box in both themes
+    thumb: {
+      width: 112,
+      height: 112,
+      borderRadius: 10,
+      backgroundColor: "#E5E7EB",
+      borderWidth: 1,
+      borderColor: "#E5E7EB",
+      justifyContent: "center",
+      alignItems: "center",
+      overflow: "hidden",
+    },
+    thumbImage: { width: "100%", height: "100%" },
 
-  rightCol: { flex: 1, gap: 6 },
+    rightCol: { flex: 1, gap: 6 },
 
-  input: {
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: "white",
-    color: "#0B1221",
-  },
+    // Use theme card/border so light + dark both look correct
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      backgroundColor: colors.card,
+      color: colors.text,
+    },
 
-  label: { fontWeight: "700", fontSize: 16 },
+    label: {
+      fontWeight: "700",
+      fontSize: 16,
+      color: colors.text,
+      marginTop: 8,
+      marginBottom: 4,
+    },
 
-  selectBox: {
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    backgroundColor: "white",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+    selectBox: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      backgroundColor: colors.card,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
 
-  statusRow: { flexDirection: "row", gap: 8, marginBottom: 4 },
-  pill: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  pillActive: { borderColor: "#0055A2", backgroundColor: "#0055A2" },
-  pillInactive: { borderColor: "#E5E7EB", backgroundColor: "white" },
-  pillText: { fontWeight: "700" },
-  pillTextActive: { color: "white" },
-  pillTextInactive: { color: "#0055A2" },
+    statusRow: { flexDirection: "row", gap: 8, marginBottom: 4 },
+    pill: {
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+      borderRadius: 999,
+      borderWidth: 1,
+    },
+    pillActive: { borderColor: colors.blue, backgroundColor: colors.blue },
+    pillInactive: { borderColor: colors.border, backgroundColor: colors.card },
+    pillText: { fontWeight: "700" },
+    pillTextActive: { color: colors.background },
+    pillTextInactive: { color: colors.blue },
 
-  muted: { color: "#667085" },
-  addPhoto: { fontSize: 18, fontWeight: "700", color: "#0B1221" },
+    muted: { color: colors.textMuted },
 
-  errorText: { color: "#B00020" },
-  errorBorder: { borderColor: "#B00020" },
+    // Good contrast on the grey upload box
+    addPhoto: { fontSize: 18, fontWeight: "700", color: "#111827" },
 
-  // Modals
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.25)",
-    justifyContent: "center",
-    padding: 24,
-  },
-  modalCard: { backgroundColor: "white", borderRadius: 14, padding: 16, gap: 10 },
-  modalTitle: { fontSize: 18, fontWeight: "700" },
-  optionRow: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10 },
-  optionRowActive: {
-    backgroundColor: "#EEF4FF",
-    borderWidth: 1,
-    borderColor: "#0055A2",
-  },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 8,
-  },
-  link: { color: "#0055A2", fontWeight: "700" },
+    errorText: { color: colors.red, marginTop: 4 },
+    errorBorder: { borderColor: colors.red },
 
-  photoAction: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "white",
-  },
-  photoActionText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#0B1221",
-  },
-});
+    // ----- Post button -----
+    postButton: {
+      marginTop: 16,
+      borderRadius: 999,
+      paddingVertical: 14,
+      alignItems: "center",
+      backgroundColor: colors.blue,
+    },
+    postButtonDisabled: {
+      opacity: 0.4,
+    },
+    postButtonText: {
+      color: "#FFFFFF",
+      fontWeight: "800",
+      fontSize: 16,
+    },
+
+    // ----- Modals -----
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.25)",
+      justifyContent: "center",
+      padding: 24,
+    },
+    modalCard: {
+      backgroundColor: colors.card,
+      borderRadius: 14,
+      padding: 16,
+      gap: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    modalTitle: { fontSize: 18, fontWeight: "700", color: colors.text },
+    optionRow: {
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+    },
+    optionRowActive: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.blue,
+    },
+    modalActions: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      marginTop: 8,
+    },
+    link: { color: colors.blue, fontWeight: "700" },
+  });
+}
+

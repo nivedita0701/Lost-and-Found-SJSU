@@ -1,27 +1,118 @@
+// Firestore Security Rules
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isSignedIn() { return request.auth != null; }
 
+    // ---------- Helpers ----------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() && (request.auth.token.admin == true);
+    }
+    function isOwner(docPath) {
+      return isSignedIn() && get(docPath).data.createdByUid == request.auth.uid;
+    }
+
+    // ---------- USERS ----------
     match /users/{uid} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.uid == uid;
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow update: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if false;
     }
 
+    // ---------- ITEMS ----------
     match /items/{itemId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.createdByUid == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.createdByUid == request.auth.uid;
-      allow delete: if isSignedIn() && resource.data.createdByUid == request.auth.uid;
+
+      // Create: must be signed in, set their own UID, and basic field types
+      allow create: if isSignedIn()
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.status in ['lost', 'found']
+        && request.resource.data.createdAt is timestamp;
+
+      // Update: only owner, and cannot change createdByUid
+      allow update: if isOwner(/databases/$(database)/documents/items/$(itemId))
+        && request.resource.data.createdByUid == resource.data.createdByUid;
+
+      // Delete: only owner
+      allow delete: if isOwner(/databases/$(database)/documents/items/$(itemId));
+
+      // ---- Claims subcollection ----
+      match /claims/{claimId} {
+        allow read: if isSignedIn();
+
+        // Create: any signed-in user can submit a pending claim for themself
+        allow create: if isSignedIn()
+          && request.resource.data.claimerUid == request.auth.uid
+          && request.resource.data.status == 'pending'
+          && request.resource.data.createdAt is timestamp;
+
+        // Update: only the item owner may change status; no other fields may change
+        allow update: if isOwner(/databases/$(database)/documents/items/$(itemId))
+          && request.resource.data.claimerUid == resource.data.claimerUid
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['status'])
+          && request.resource.data.status in ['pending','approved','rejected'];
+
+        allow delete: if false;
+      }
     }
 
-    match /items/{itemId}/claims/{claimId} {
-      allow read: if isSignedIn();
+    // ---------- CHATS ----------
+    // A chat thread belongs to two participants; only they may read it.
+    match /chats/{threadId} {
+      // Read: only participants
+      allow read: if isSignedIn() && (request.auth.uid in resource.data.participants);
+
+      // Create: must be participant; 2 participants list; must include itemId
+      allow create: if isSignedIn()
+        && request.resource.data.participants is list
+        && request.resource.data.participants.size() == 2
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.itemId is string;
+
+      // Update: allow bumping updatedAt only; participants must not change
+      allow update: if isSignedIn()
+        && (request.auth.uid in resource.data.participants)
+        && request.resource.data.participants == resource.data.participants
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['updatedAt']);
+
+      allow delete: if false;
+
+      // Messages are append-only; only participants can write/read
+      match /messages/{msgId} {
+        allow read: if isSignedIn()
+          && (request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participants);
+
+        allow create: if isSignedIn()
+          && (request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participants)
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.createdAt is timestamp;
+
+        allow update, delete: if false;
+      }
+    }
+
+    // ---------- ZONES (read-only) ----------
+    match /zones/{zoneId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ---------- FLAGS (reports) ----------
+    match /flags/{flagId} {
+      allow read: if isAdmin();          // only admins read flags
+      allow create: if isSignedIn();     // any signed-in user can report
+      allow update, delete: if false;
+    }
+
+    // ---------- ISSUES (support) ----------
+    match /issues/{issueId} {
       allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (
-        resource.data.claimerUid == request.auth.uid ||
-        get(/databases/$(database)/documents/items/$(itemId)).data.createdByUid == request.auth.uid
-      );
+      allow read, update, delete: if false; // internal only
     }
   }
 }

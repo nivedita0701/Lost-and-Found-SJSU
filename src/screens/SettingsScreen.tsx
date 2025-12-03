@@ -1,36 +1,53 @@
 // src/screens/SettingsScreen.tsx
 import React, { useEffect, useState } from "react";
-import { View, TextInput, Button, Text, Alert } from "react-native";
+import {
+  View,
+  Text,
+  Alert,
+  ScrollView,
+  SafeAreaView,
+  TouchableOpacity,
+  ActivityIndicator,
+  StyleSheet,
+} from "react-native";
 import { auth, db } from "@/firebase";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
-import { registerForPushAsync } from "@/services/notifications"; // already exists in your repo
-import { Picker } from "@react-native-picker/picker";
-
-type ThemeMode = "system" | "light" | "dark";
-type Accent = "blue" | "gold" | "purple";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { registerForPushAsync } from "@/services/notifications";
+import { useTheme } from "@/ui/ThemeProvider";
+import type { ThemeMode, Accent } from "@/ui/theme";
 
 export default function SettingsScreen() {
   const uid = auth.currentUser?.uid || "";
 
-  const [locations, setLocations] = useState("Engineering Building, Library");
-  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
-  const [accent, setAccent] = useState<Accent>("blue");
-  const [saving, setSaving] = useState(false);
+  const { theme, mode, accent, setMode, setAccent } = useTheme();
+  const { colors } = theme;
 
-  // hydrate from Firestore (if present)
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [pushEnabled, setPushEnabled] = useState(false);
+
   useEffect(() => {
     (async () => {
       try {
-        if (!uid) return;
+        if (!uid) {
+          setLoading(false);
+          return;
+        }
         const snap = await getDoc(doc(db, "users", uid));
         const data = snap.data() || {};
-        if (Array.isArray(data.preferredLocations) && data.preferredLocations.length) {
-          setLocations(data.preferredLocations.join(", "));
+        if (data.prefs?.themeMode) {
+          setMode(data.prefs.themeMode as ThemeMode);
         }
-        if (data.prefs?.themeMode) setThemeMode(data.prefs.themeMode);
-        if (data.prefs?.accent) setAccent(data.prefs.accent);
+        if (data.prefs?.accent) {
+          setAccent(data.prefs.accent as Accent);
+        }
+        if (typeof data.prefs?.pushEnabled === "boolean") {
+          setPushEnabled(data.prefs.pushEnabled);
+        }
       } catch {
         // ignore
+      } finally {
+        setLoading(false);
       }
     })();
   }, [uid]);
@@ -40,20 +57,18 @@ export default function SettingsScreen() {
       if (!uid) return;
       setSaving(true);
 
-      const prefs = {
-        themeMode,
-        accent,
-      };
-
       await setDoc(
         doc(db, "users", uid),
         {
-          preferredLocations: locations.split(",").map((s) => s.trim()).filter(Boolean),
-          prefs,
+          prefs: {
+            themeMode: mode,
+            accent,
+            pushEnabled: true,
+          },
         },
         { merge: true }
       );
-
+      setPushEnabled(true);
       Alert.alert("Saved", "Preferences updated.");
     } catch (e: any) {
       Alert.alert("Error", e?.message || "Could not save settings");
@@ -66,58 +81,310 @@ export default function SettingsScreen() {
     try {
       await savePrefs();
       await registerForPushAsync();
-      Alert.alert("Ready", "Push notifications enabled for your locations.");
+      Alert.alert("Ready", "Push notifications enabled.");
     } catch (e: any) {
       Alert.alert("Notifications", e?.message || "Could not register for push");
     }
   }
 
+  if (loading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+          <ActivityIndicator color={colors.blue} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <View style={{ padding: 16, gap: 12 }}>
-      <Text style={{ fontSize: 24, fontWeight: "800" }}>Settings</Text>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          { backgroundColor: colors.background },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={[styles.title, { color: colors.text }]}>Settings</Text>
 
-      {/* Notifications */}
-      <Text style={{ fontSize: 18, fontWeight: "700", marginTop: 8 }}>Notification Preferences</Text>
-      <Text style={{ color: "#475569" }}>
-        Buildings/areas you care about (comma-separated). When a new item is posted that contains any of
-        these terms in its location, you’ll get a push.
-      </Text>
-      <TextInput
-        value={locations}
-        onChangeText={setLocations}
-        style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 10, backgroundColor: "white" }}
-        placeholder="e.g., Engineering Building, Library"
-        placeholderTextColor="#667085"
-        autoCapitalize="none"
-      />
-      <Button title={saving ? "Saving…" : "Save preferences"} onPress={savePrefs} disabled={saving} />
-      <Button title="Save & Register for Push" onPress={saveAndRegister} />
+        {/* Notifications */}
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          Notifications
+        </Text>
+        <Text style={[styles.body, { color: colors.textMuted }]}>
+          Turn on push notifications to hear about new lost or found items
+          related to you.
+        </Text>
 
-      {/* Theme */}
-      <Text style={{ fontSize: 18, fontWeight: "700", marginTop: 16 }}>Theme</Text>
-      <Text style={{ color: "#475569" }}>Choose how the app looks. (Stored in your profile prefs.)</Text>
-      <View style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, overflow: "hidden", backgroundColor: "white" }}>
-        <Picker selectedValue={themeMode} onValueChange={(v) => setThemeMode(v)}>
-          <Picker.Item label="Use system setting" value="system" />
-          <Picker.Item label="Light" value="light" />
-          <Picker.Item label="Dark" value="dark" />
-        </Picker>
-      </View>
+        <TouchableOpacity
+          style={[
+            styles.primaryBtn,
+            {
+              backgroundColor: pushEnabled ? colors.border : colors.blue,
+              shadowColor: pushEnabled ? "transparent" : colors.shadow,
+              opacity: pushEnabled ? 0.6 : 1,
+            },
+          ]}
+          onPress={pushEnabled ? undefined : saveAndRegister}
+          disabled={pushEnabled || saving}   // 👈 can't spam when enabled/saving
+        >
+          <Text style={[styles.primaryBtnText, { color: "#FFFFFF" }]}>
+            {pushEnabled
+              ? "Push notifications enabled"
+              : "Enable push notifications"}
+          </Text>
+        </TouchableOpacity>
 
-      {/* Accent color */}
-      <Text style={{ fontSize: 18, fontWeight: "700", marginTop: 8 }}>Accent color</Text>
-      <View style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, overflow: "hidden", backgroundColor: "white" }}>
-        <Picker selectedValue={accent} onValueChange={(v) => setAccent(v)}>
-          <Picker.Item label="Blue" value="blue" />
-          <Picker.Item label="Gold" value="gold" />
-          <Picker.Item label="Purple" value="purple" />
-        </Picker>
-      </View>
+        {/* Theme */}
+        <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 24 }]}>
+          Theme
+        </Text>
+        <Text style={[styles.body, { color: colors.textMuted }]}>
+          Choose how the app looks on your device.
+        </Text>
 
-      <Text style={{ color: "#6b7280" }}>
-        (Hook this into your ThemeProvider to apply immediately. For now, we persist the preference on your user
-        profile so it’s available on next app load.)
-      </Text>
-    </View>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          <SegmentRow
+            label="Use system setting"
+            value="system"
+            current={mode}
+            onChange={setMode}
+            colors={colors}
+          />
+          <SegmentRow
+            label="Light"
+            value="light"
+            current={mode}
+            onChange={setMode}
+            colors={colors}
+          />
+          <SegmentRow
+            label="Dark"
+            value="dark"
+            current={mode}
+            onChange={setMode}
+            colors={colors}
+          />
+        </View>
+
+        {/* Accent color */}
+        <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 16 }]}>
+          Accent color
+        </Text>
+
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          {/* 🔵 use static swatch colors so they don't change with accent */}
+          <AccentRow
+            label="Blue"
+            value="blue"
+            current={accent}
+            swatchColor="#3B82F6" // fixed blue
+            onChange={setAccent}
+            colors={colors}
+          />
+          <AccentRow
+            label="Gold"
+            value="gold"
+            current={accent}
+            swatchColor="#FACC15" // fixed gold
+            onChange={setAccent}
+            colors={colors}
+          />
+          <AccentRow
+            label="Purple"
+            value="purple"
+            current={accent}
+            swatchColor="#A855F7" // fixed purple
+            onChange={setAccent}
+            colors={colors}
+          />
+        </View>
+
+        <TouchableOpacity
+          style={[
+            styles.secondaryBtn,
+            { borderColor: colors.border, backgroundColor: colors.card },
+          ]}
+          onPress={savePrefs}
+          disabled={saving}
+        >
+          <Text style={[styles.secondaryBtnText, { color: colors.text }]}>
+            {saving ? "Saving…" : "Save preferences"}
+          </Text>
+        </TouchableOpacity>
+
+        <Text style={[styles.footerNote, { color: colors.textMuted }]}>
+          Theme and accent are saved to your profile and applied immediately
+          across the app.
+        </Text>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
+
+type SegmentRowProps = {
+  label: string;
+  value: ThemeMode;
+  current: ThemeMode;
+  onChange: (v: ThemeMode) => void;
+  colors: any;
+};
+
+function SegmentRow({ label, value, current, onChange, colors }: SegmentRowProps) {
+  const active = current === value;
+  return (
+    <TouchableOpacity
+      onPress={() => onChange(value)}
+      style={[
+        styles.segmentRow,
+        active && { borderColor: colors.blue, backgroundColor: "#FFFFFF10" },
+      ]}
+    >
+      <Text
+        style={[
+          styles.segmentLabel,
+          { color: active ? colors.text : colors.textMuted },
+        ]}
+      >
+        {label}
+      </Text>
+      {active && <Text style={{ color: colors.blue, fontWeight: "700" }}>✓</Text>}
+    </TouchableOpacity>
+  );
+}
+
+type AccentRowProps = {
+  label: string;
+  value: Accent;
+  current: Accent;
+  swatchColor: string;
+  onChange: (v: Accent) => void;
+  colors: any;
+};
+
+function AccentRow({
+  label,
+  value,
+  current,
+  swatchColor,
+  onChange,
+  colors,
+}: AccentRowProps) {
+  const active = current === value;
+  return (
+    <TouchableOpacity
+      onPress={() => onChange(value)}
+      style={[
+        styles.segmentRow,
+        active && { borderColor: colors.blue, backgroundColor: "#FFFFFF10" },
+      ]}
+    >
+      <View
+        style={[
+          styles.swatch,
+          { backgroundColor: swatchColor, borderColor: colors.border },
+        ]}
+      />
+      <Text
+        style={[
+          styles.segmentLabel,
+          { color: active ? colors.text : colors.textMuted },
+        ]}
+      >
+        {label}
+      </Text>
+      {active && <Text style={{ color: colors.blue, fontWeight: "700" }}>✓</Text>}
+    </TouchableOpacity>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "800",
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  body: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  primaryBtn: {
+    marginTop: 8,
+    paddingVertical: 12,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  primaryBtnText: {
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  card: {
+    marginTop: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 4,
+  },
+  segmentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginHorizontal: 8,
+    marginVertical: 4,
+  },
+  segmentLabel: {
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  swatch: {
+    width: 18,
+    height: 18,
+    borderRadius: 999,
+    marginRight: 10,
+    borderWidth: 1,
+  },
+  secondaryBtn: {
+    marginTop: 20,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  secondaryBtnText: {
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  footerNote: {
+    fontSize: 12,
+    marginTop: 12,
+  },
+});

@@ -1,5 +1,5 @@
 // src/screens/ChatScreen.tsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -19,11 +19,12 @@ import * as ImagePicker from "expo-image-picker";
 import { auth } from "@/firebase";
 import { ChatMessage, sendMessage, watchMessages } from "@/services/chats";
 import { uploadItemPhotoAsync } from "@/services/items";
+import { useTheme } from "@/ui/ThemeProvider";
 
 type RouteParams = {
   threadId: string;
   itemTitle?: string;
-  itemImage?: string;   // 👈 new
+  itemImage?: string;
 };
 
 const IMAGE_PREFIX = "IMG::";
@@ -32,6 +33,10 @@ export default function ChatScreen() {
   const route = useRoute<any>();
   const { threadId, itemTitle, itemImage } = route.params as RouteParams;
   const uid = auth.currentUser?.uid || "";
+
+  const { theme } = useTheme();
+  const { colors } = theme;
+  const s = useMemo(() => makeStyles(colors), [colors]);
 
   const [msgs, setMsgs] = useState<ChatMessage[]>([]);
   const [text, setText] = useState("");
@@ -72,7 +77,10 @@ export default function ChatScreen() {
 
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (perm.status !== "granted") {
-        Alert.alert("Permission", "Photo access is required to attach an image.");
+        Alert.alert(
+          "Permission",
+          "Photo access is required to attach an image."
+        );
         return;
       }
 
@@ -174,7 +182,7 @@ export default function ChatScreen() {
             onChangeText={setText}
             placeholder="Message"
             style={s.input}
-            placeholderTextColor="#667085"
+            placeholderTextColor={colors.textMuted}
             returnKeyType="send"
             onSubmitEditing={onSend}
             blurOnSubmit={false}
@@ -221,157 +229,167 @@ export default function ChatScreen() {
   );
 }
 
-const s = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: "#F3F4F6" },
+function makeStyles(colors: any) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: colors.background },
 
-  header: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
-    backgroundColor: "white",
-  },
-  title: { fontSize: 18, fontWeight: "800" },
+    header: {
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      backgroundColor: colors.card,
+    },
+    title: { fontSize: 18, fontWeight: "800", color: colors.text },
 
-  // item banner
-  itemBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "white",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
-  },
-  itemThumb: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: "#E5E7EB",
-    marginRight: 10,
-  },
-  itemBannerTitle: {
-    fontWeight: "700",
-    color: "#0B1221",
-  },
-  itemBannerHint: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginTop: 2,
-  },
+    itemBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: colors.card,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    itemThumb: {
+      width: 40,
+      height: 40,
+      borderRadius: 8,
+      backgroundColor: colors.border,
+      marginRight: 10,
+    },
+    itemBannerTitle: {
+      fontWeight: "700",
+      color: colors.text,
+    },
+    itemBannerHint: {
+      fontSize: 12,
+      color: colors.textMuted,
+      marginTop: 2,
+    },
 
-  listContent: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 8,
-    gap: 6,
-  },
+    listContent: {
+      paddingHorizontal: 12,
+      paddingTop: 12,
+      paddingBottom: 8,
+      gap: 6,
+    },
 
-  row: {
-    flexDirection: "row",
-    marginVertical: 2,
-  },
+    row: {
+      flexDirection: "row",
+      marginVertical: 2,
+    },
 
-  bubble: {
-    maxWidth: "72%",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 18,
-  },
-  bubbleMine: {
-    backgroundColor: "#0B1221",
-    borderBottomRightRadius: 4,
-  },
-  bubbleTheirs: {
-    backgroundColor: "#E5E7EB",
-    borderBottomLeftRadius: 4,
-  },
+    bubble: {
+      maxWidth: "72%",
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 18,
+    },
+    bubbleMine: {
+      backgroundColor: colors.blue,
+      borderBottomRightRadius: 4,
+    },
+    bubbleTheirs: {
+      backgroundColor: colors.card,
+      borderBottomLeftRadius: 4,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
 
-  text: { fontSize: 15 },
-  textMine: { color: "white" },
-  textTheirs: { color: "#0B1221" },
+    text: { fontSize: 15 },
+    textMine: { color: colors.background },
+    textTheirs: { color: colors.text },
 
-  image: {
-    width: 220,
-    height: 160,
-    borderRadius: 14,
-  },
+    image: {
+      width: 220,
+      height: 160,
+      borderRadius: 14,
+    },
 
-  inputBarWrapper: {
-    paddingHorizontal: 8,
-    paddingTop: 4,
-    paddingBottom: Platform.OS === "ios" ? 20 : 12,
-    backgroundColor: "transparent",
-  },
-  inputBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
+    inputBarWrapper: {
+      paddingHorizontal: 8,
+      paddingTop: 4,
+      paddingBottom: Platform.OS === "ios" ? 20 : 12,
+      backgroundColor: colors.background,
+    },
+    inputBar: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 8,
+      paddingVertical: 8,
+      borderRadius: 999,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
 
-  attachBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 4,
-  },
-  attachIcon: { fontSize: 18, color: "#6b7280" },
+    attachBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 4,
+    },
+    attachIcon: { fontSize: 18, color: colors.textMuted },
 
-  input: {
-    flex: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 15,
-  },
+    input: {
+      flex: 1,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      fontSize: 15,
+      color: colors.text,
+    },
 
-  send: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#0B1221",
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 4,
-  },
-  sendDisabled: {
-    opacity: 0.3,
-  },
-  sendTxt: { color: "white", fontWeight: "800", fontSize: 18, marginTop: -1 },
+    send: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.blue,
+      alignItems: "center",
+      justifyContent: "center",
+      marginLeft: 4,
+    },
+    sendDisabled: {
+      opacity: 0.3,
+    },
+    sendTxt: {
+      color: colors.background,
+      fontWeight: "800",
+      fontSize: 18,
+      marginTop: -1,
+    },
 
-  // full-screen preview
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.8)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  modalContent: {
-    width: "100%",
-    alignItems: "center",
-  },
-  modalImage: {
-    width: "100%",
-    aspectRatio: 4 / 3,
-    borderRadius: 16,
-    backgroundColor: "#000",
-  },
-  modalClose: {
-    marginTop: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "white",
-  },
-  modalCloseTxt: {
-    color: "#0B1221",
-    fontWeight: "700",
-  },
-});
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.8)",
+      justifyContent: "center",
+      alignItems: "center",
+      padding: 24,
+    },
+    modalContent: {
+      width: "100%",
+      alignItems: "center",
+    },
+    modalImage: {
+      width: "100%",
+      aspectRatio: 4 / 3,
+      borderRadius: 16,
+      backgroundColor: "#000",
+    },
+    modalClose: {
+      marginTop: 16,
+      paddingHorizontal: 18,
+      paddingVertical: 8,
+      borderRadius: 999,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    modalCloseTxt: {
+      color: colors.text,
+      fontWeight: "700",
+    },
+  });
+}
